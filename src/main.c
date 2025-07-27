@@ -14,7 +14,7 @@
     #define PLATFORM_WINDOWS 1
 #include <direct.h>
 #include <windows.h>
-#include <sys/stat.h>  // 添加这行
+#include <sys/stat.h>
 #define MKDIR(path) _mkdir(path)
 #define CHDIR(path) _chdir(path)
 #define PATH_SEP '\\'
@@ -1077,6 +1077,11 @@ int uninstall_thirdparty_library(int argc ,char* argv[]) {
 }
 
 int main(int argc,char*argv[]){
+
+#if defined(PLATFORM_WINDOWS)
+    SetConsoleOutputCP(CP_UTF8);    
+    SetConsoleCP(CP_UTF8);
+#endif
     
     print_platform_info();
 
