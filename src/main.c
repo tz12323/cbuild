@@ -101,7 +101,7 @@ int create_cmake_toml(const char* project_name, const char* project_type, char d
     fprintf(toml_file, "[project]\n");
     fprintf(toml_file, "name = \"%s\"\n", project_name);
     fprintf(toml_file, "type = \"%s\"\n", project_type);
-    fprintf(toml_file, "version = \"1.0.0\"极\n\n");
+    fprintf(toml_file, "version = \"1.0.0\"\n\n");
     
     fprintf(toml_file, "# 依赖配置\n");
     fprintf(toml_file, "[dependencies]\n");
@@ -144,7 +144,7 @@ void trim_string(char *str) {
 
 // 智能解析CMake.toml文件
 int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PATH_LEN], int* num_deps) {
-    FILE* toml_file = fopen("极CMake.toml", "r");
+    FILE* toml_file = fopen("CMake.toml", "r");
     if (!toml_file) return 0;
     
     char line[BUFFER_SIZE];
@@ -167,11 +167,13 @@ int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PAT
             in_project = 1;
             in_dependencies = 0;
             continue;
-        } else if (strstr(line, "[dependencies]")) {
+        } 
+        else if (strstr(line, "[dependencies]")) {
             in_project = 0;
             in_dependencies = 1;
             continue;
-        } else if (line[0] == '[') {
+        } 
+        else if (line[0] == '[') {
             in_project = 0;
             in_dependencies = 0;
             continue;
@@ -490,7 +492,7 @@ uint8_t create_new_project(int argc,char*argv[]){
     char deps[MAX_DEPS][MAX_PATH_LEN];
     int num_deps = 0;
     if (!parse_cmake_toml(project_name, project_type, deps, &num_deps)) {
-        printf("警告：未能完全解析CMake.toml，使用默认配置\n");
+        printf("警告 : 未能完全解析CMake.toml,使用默认配置\n");
     }
     else if (num_deps > 0) {
         printf("检测到依赖项: ");
