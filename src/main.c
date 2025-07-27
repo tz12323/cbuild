@@ -4,8 +4,14 @@
 #include<errno.h>
 #include<stdint.h>
 #include<ctype.h>  
+#include<stdbool.h>
 
-#if defined(_WIN32)
+#if defined(__linux__)
+    #define PLATFORM_LINUX 1
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+    #define PLATFORM_WINDOWS 1
 #include <direct.h>
 #include <windows.h>
 #include <sys/stat.h>  // 添加这行
@@ -23,6 +29,7 @@
 #define PATH_SEP '/'
 #define EXE_EXT ""
 #if defined(__APPLE__)
+    #define PLATFORM_MACOS 1
 #define STATIC_LIB_EXT ".a"
 #define SHARED_LIB_EXT ".dylib"
 #else
@@ -38,11 +45,11 @@
 // 显示平台信息
 void print_platform_info() {
     printf("运行平台: ");
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
     printf("Windows\n");
-#elif defined(__APPLE__)
+#elif defined(PLATFORM_MACOS)
     printf("macOS\n");
-#elif defined(__linux__)
+#elif defined(PLATFORM_LINUX)
     printf("Linux\n");
 #else
     printf("未知平台\n");
@@ -54,24 +61,27 @@ void print_usage(const char* program_name) {
     print_platform_info();
     printf("\n用法: %s [选项] <项目名>\n\n", program_name);
     printf("选项:\n");
-    printf("  new <项目名>       创建新项目\n");
-    printf("    -e, --executable 创建可执行项目（默认）\n");
-    printf("    -s, --static     创建静态库项目\n");
-    printf("    -d, --shared     创建动态库项目\n");
-    printf("    -D, --dep <依赖> 添加项目依赖\n");
-    printf("    -h, --help       显示此帮助信息\n\n");
-    printf("  build              构建项目\n");
-    printf("    -d, --debug      使用Debug模式构建\n");
-    printf("    -r, --release    使用Release模式构建\n");
-    printf("  init               根据CMake.toml创建新项目\n");
+    printf("  new <项目名>                创建新项目\n");
+    printf("    -e, --executable         创建可执行项目（默认）\n");
+    printf("    -s, --static             创建静态库项目\n");
+    printf("    -d, --shared             创建动态库项目\n");
+    printf("    -D, --dep <依赖>         添加项目依赖\n");
+    printf("    -h, --help               显示此帮助信息\n\n");
+    printf("  build                      构建项目\n");
+    printf("    -d, --debug              使用Debug模式构建\n");
+    printf("    -r, --release            使用Release模式构建\n");
+    printf("    -p, --prefix             指定安装目录\n");
+    printf("    -c, --configure-only     选择是否构建\n");
+    printf("    -b, --build-dir          设置构建目录\n");
+    printf("  init                       根据CMake.toml创建新项目\n");
     printf("示例:\n");
     printf("  %s new myapp -e -D fmt -D sdl2\n", program_name);
     printf("  %s new mylib -s -D boost\n", program_name);
     
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
     printf("\n注意: Windows平台需要预先安装CMake和编译器\n");
     printf("      推荐使用MSVC或MinGW\n");
-#elif defined(__APPLE__)
+#elif defined(PLATFORM_MACOS)
     printf("\n注意: macOS平台需要安装Xcode命令行工具:\n");
     printf("      xcode-select --install\n");
 #else
@@ -532,12 +542,14 @@ uint8_t create_new_project(int argc,char*argv[]){
         printf("  cmake ..\n");
         printf("  cmake --build .\n");
         printf("  .%c%s%s\n", PATH_SEP, project_name, EXE_EXT);
-    } else if (strcmp(project_type, "static") == 0) {
+    } 
+    else if (strcmp(project_type, "static") == 0) {
         printf("  cmake ..\n");
         printf("  cmake --build .\n");
         printf("  # 静态库文件: build%clib%cstatic%c%s%s\n", 
                PATH_SEP, PATH_SEP, PATH_SEP, project_name, STATIC_LIB_EXT);
-    } else {
+    } 
+    else {
         printf("  cmake ..\n");
         printf("  cmake --build .\n");
         printf("  # 动态库文件: build%cbin%c%s%s (Windows) 或 build%clib%cshared%c%s\n", 
@@ -546,10 +558,10 @@ uint8_t create_new_project(int argc,char*argv[]){
     }
     
     if (num_deps > 0) {
-        printf("\n注意：本项目的依赖项需要通过系统包管理器安装\n");
-#if defined(_WIN32)
+        printf("\n注意 : 本项目的依赖项需要通过系统包管理器安装\n");
+#if defined(PLATFORM_WINDOWS)
         printf("      请使用 vcpkg 安装依赖项\n");
-#elif defined(__APPLE__)
+#elif defined(PLATFORM_MACOS)
         printf("      请使用 Homebrew 安装依赖项\n");
 #else
         printf("      请使用 apt-get/yum 安装依赖项\n");
@@ -640,10 +652,10 @@ uint8_t init_project(int argc,char*argv[]){
     }
     
     if (num_deps > 0) {
-        printf("\n注意：本项目的依赖项需要通过系统包管理器安装\n");
-#if defined(_WIN32)
+        printf("\n注意 : 本项目的依赖项需要通过系统包管理器安装\n");
+#if defined(PLATFORM_WINDOWS)
         printf("      请使用 vcpkg 安装依赖项\n");
-#elif defined(__APPLE__)
+#elif defined(PLATFORM_MACOS)
         printf("      请使用 Homebrew 安装依赖项\n");
 #else
         printf("      请使用 apt-get/yum 安装依赖项\n");
@@ -657,7 +669,7 @@ uint8_t init_project(int argc,char*argv[]){
 int execute_command(const char* command) {
     printf("执行命令: %s\n", command);
     
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
     // Windows下需要将参数传递给cmd
     char cmd[MAX_PATH_LEN * 3];
     snprintf(cmd, sizeof(cmd), "cmd /c \"%s\"", command);
@@ -671,14 +683,15 @@ int execute_command(const char* command) {
         return 0;
     }
     
-#if !defined(_WIN32)
+#if !defined(PLATFORM_WINDOWS)
     if (WIFEXITED(status)) {
         int exit_status = WEXITSTATUS(status);
         if (exit_status != 0) {
             fprintf(stderr, "命令退出代码: %d\n", exit_status);
             return 0;
         }
-    } else {
+    } 
+    else {
         fprintf(stderr, "命令异常终止\n");
         return 0;
     }
@@ -687,88 +700,192 @@ int execute_command(const char* command) {
     return 1;
 }
 
-uint8_t build_project(int argc,char*argv[]){
-    // 检查build目录是否存在
-    struct stat st;
-    memset(&st, 0, sizeof(st)); // 修复初始化方式
-    char cmake_build_type[10] = "Debug";
-#if defined(_WIN)
-    ;
+uint8_t build_project(int argc, char* argv[]) {
+    char cmake_build_type[16] = "Debug"; // 使用更安全的长度
+    char make_install_prefix[MAX_PATH_LEN] = ""; // 跨平台前缀初始化
+    char build_dir[MAX_PATH_LEN] = "build";
+    char additional_flags[1024] = "";
+    bool configure_only = false;
+
+    // 设置默认安装路径
+#if PLATFORM_WINDOWS
+    strcpy(make_install_prefix, ".\\install"); // Windows默认安装路径
 #else
-    char make_install_prefix[MAX_PATH_LEN] = "/usr/local/";
+    // Unix默认安装路径
+    const char* home = getenv("HOME");
+    if (home) {
+        snprintf(make_install_prefix, MAX_PATH_LEN, "%s/.local", home);
+    } else {
+        strcpy(make_install_prefix, "/usr/local");
+    }
 #endif
 
-    if(argc>2){
-        for(size_t i = 2; i < argc; i++){
-            if(argv[i][0]!='-'){
-                printf("未知参数\n");
+    // 增强的参数解析
+    for (int i = 2; i < argc; i++) {
+        if (!strcmp(argv[i], "-d") || !strcmp(argv[i], "--debug")) {
+            strcpy(cmake_build_type, "Debug");
+        } 
+        else if (!strcmp(argv[i], "-r") || !strcmp(argv[i], "--release")) {
+            strcpy(cmake_build_type, "Release");
+        } 
+        else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--prefix")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "错误：未指定安装目录\n");
+                return EXIT_FAILURE;
             }
-            else if(!strcmp(argv[i],"-d") || !strcmp(argv[i],"--debug")){
-                strcpy(cmake_build_type,"Debug");
+            if(argv[i+1][0]=='-'){
+                fprintf(stderr, "错误：未指定安装目录,使用默认安装目录\n");
+                continue;
             }
-            else if(!strcmp(argv[i],"-r") || !strcmp(argv[i],"--release")){
-                strcpy(cmake_build_type,"Release");
+            strncpy(make_install_prefix, argv[++i], MAX_PATH_LEN - 1);
+            make_install_prefix[MAX_PATH_LEN - 1] = '\0';
+        } 
+        else if (!strcmp(argv[i], "--configure-only") || !strcmp(argv[i], "-c")) {
+            configure_only = true;
+        } 
+        else if (!strcmp(argv[i], "-b") || !strcmp(argv[i], "--build-dir")) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "错误：未指定构建目录\n");
+                return EXIT_FAILURE;
             }
-#if defined(_WIN)
-            ;
-#else
-            else if(!strcmp(argv[i],"-p") || !strcmp(argv[i],"--prefix")){
-                if(i+1 >= argc){
-                    printf("未识别到安装目录\n");
-                }
-                else{
-                    strcpy(cmake_build_type,argv[i+1]);
-                    i++;
-                }
-            }
-#endif
+            strncpy(build_dir, argv[++i], MAX_PATH_LEN - 1);
+            build_dir[MAX_PATH_LEN - 1] = '\0';
+        }
+        else {
+            // 收集额外的CMake参数
+            if (additional_flags[0] != '\0') strcat(additional_flags, " ");
+            strncat(additional_flags, argv[i], sizeof(additional_flags) - strlen(additional_flags) - 1);
         }
     }
 
-    printf("构建模式为 : %s\n",cmake_build_type);
+    printf("构建模式: %s | 安装路径: %s\n", cmake_build_type, make_install_prefix);
 
-    if (stat("build", &st) == -1) {
-        // 如果build目录不存在，创建它
-        if (!create_directory("build")) {
+    // 处理构建目录
+    struct stat st;
+    memset(&st, 0, sizeof(st));
+    if (stat(build_dir, &st) == -1) {
+        if (!create_directory(build_dir)) {
+            fprintf(stderr, "创建构建目录失败: %s\n", build_dir);
             return EXIT_FAILURE;
         }
     }
-    
-    // 进入build目录
-    if (CHDIR("build") != 0) {
-        perror("无法进入build目录");
-        return EXIT_FAILURE;
-    }
-    
-    // 检测CMake缓存
-    char cmake_command[MAX_PATH_LEN];
-    if (stat("CMakeCache.txt", &st) == 0) {
-        printf("检测到CMake缓存,跳过配置阶段\n");
-#if defined(_WIN)
-        strcpy(cmake_command, "cmake --build .");
-#else
-        strcpy(cmake_command, "make -j$(nproc)");
-#endif
-    } 
 
-    else {
-#if defined(_WIN)
-        snprintf(cmake_command,MAX_PATH_LEN,"cmake .. -DCMAKE_BUILD_TYPE=%s && cmake --build .",cmake_build_type);
-#else
-        snprintf(cmake_command,MAX_PATH_LEN,"cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=%s && make -j$(nproc)",cmake_build_type ,make_install_prefix);
-#endif
-    }
-    
-    // 执行构建命令
-    if (!execute_command(cmake_command)) {
-        fprintf(stderr, "构建失败\n");
+    // 保存当前目录
+    char cwd[MAX_PATH_LEN];
+    if (!getcwd(cwd, sizeof(cwd))) {
+        perror("无法获取当前目录");
         return EXIT_FAILURE;
     }
+
+    // 进入构建目录
+    if (CHDIR(build_dir) != 0) {
+        perror("无法进入构建目录");
+        fprintf(stderr, "目标目录: %s\n", build_dir);
+        return EXIT_FAILURE;
+    }
+
+    char cmake_command[MAX_PATH_LEN * 3] = ""; // 三倍缓冲区确保安全
+    bool need_configure = true;
     
-    // 返回项目根目录
-    CHDIR("..");
-    
-    printf("\n构建成功!\n");
+    // 检查是否存在CMake缓存文件
+    if (stat("CMakeCache.txt", &st) == 0) {
+        // 尝试获取缓存的构建类型
+        FILE* cache_file = fopen("CMakeCache.txt", "r");
+        if (cache_file) {
+            char line[256];
+            char existing_type[16] = "";
+            
+            while (fgets(line, sizeof(line), cache_file)) {
+                if (strstr(line, "CMAKE_BUILD_TYPE:STRING")) {
+                    char* value = strchr(line, '=');
+                    if (value) {
+                        value++; // 跳过等号
+                        // 提取值并去除换行符
+                        size_t len = strcspn(value, "\r\n");
+                        if (len < sizeof(existing_type)) {
+                            strncpy(existing_type, value, len);
+                            existing_type[len] = '\0';
+                        }
+                    }
+                }
+            }
+            fclose(cache_file);
+            
+            if (strcmp(existing_type, cmake_build_type) == 0) {
+                need_configure = false;
+                printf("检测到现有的CMake缓存(构建类型相同),跳过配置阶段\n");
+            } 
+            else {
+                printf("构建类型从 %s 变为 %s,需要重新配置\n", existing_type, cmake_build_type);
+                need_configure = true;
+            }
+        }
+    } 
+    else {
+        printf("未找到CMake缓存,需要进行配置\n");
+    }
+
+    // 配置阶段
+    if (need_configure) {
+        // 构建配置命令
+        #if PLATFORM_WINDOWS
+            // Windows路径需要特殊处理反斜杠
+            char escaped_prefix[MAX_PATH_LEN * 2] = {0};
+            char* pos = make_install_prefix;
+            char* dest = escaped_prefix;
+            while (*pos && (dest - escaped_prefix) < sizeof(escaped_prefix) - 2) {
+                if (*pos == '\\') *dest++ = '\\'; // 对反斜杠进行转义
+                *dest++ = *pos++;
+            }
+            *dest = '\0';
+            
+            snprintf(cmake_command, sizeof(cmake_command), 
+                "cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" %s",
+                cmake_build_type, escaped_prefix, additional_flags);
+        #else
+            snprintf(cmake_command, sizeof(cmake_command), 
+                "cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" %s",
+                cmake_build_type, make_install_prefix, additional_flags);
+        #endif
+        
+        printf("配置CMake: %s\n", cmake_command);
+        if (!execute_command(cmake_command)) {
+            fprintf(stderr, "CMake配置失败\n");
+            CHDIR(cwd); // 恢复原始目录
+            return EXIT_FAILURE;
+        }
+    }
+
+    // 构建阶段
+    if (!configure_only) {
+        char build_tool[128];
+        #if PLATFORM_WINDOWS
+            snprintf(build_tool, sizeof(build_tool), "cmake --build .");
+        #else
+            // 尝试获取核心数
+            int core_count = sysconf(_SC_NPROCESSORS_ONLN);
+            if (core_count > 0) {
+                snprintf(build_tool, sizeof(build_tool), "cmake --build . --parallel %d", core_count);
+            } else {
+                strcpy(build_tool, "cmake --build .");
+            }
+        #endif
+
+        printf("构建中: %s\n", build_tool);
+        if (!execute_command(build_tool)) {
+            fprintf(stderr, "构建失败\n");
+            CHDIR(cwd); // 恢复原始目录
+            return EXIT_FAILURE;
+        }
+    }
+
+    // 返回原始目录
+    if (CHDIR(cwd) != 0) {
+        perror("返回原始目录失败");
+        return EXIT_FAILURE;
+    }
+
+    printf("\n构建%s成功!\n", configure_only ? "配置" : "");
     return EXIT_SUCCESS;
 }
 
@@ -794,7 +911,7 @@ uint8_t clean_project_cache() {
     }
 
     // 清理操作
-#if defined(_WIN32)
+#if defined(PLATFORM_WINDOWS)
     // Windows: 返回上级目录后删除整个build
     CHDIR("..");
     if (!execute_command("rmdir /S /Q build 2>NUL")) {
@@ -820,6 +937,145 @@ uint8_t clean_project_cache() {
     return EXIT_SUCCESS;
 }
 
+uint8_t install_project(int argc, char* argv[]) {
+    char install_path[MAX_PATH_LEN] = {0}; // 初始化路径缓冲区
+
+#if defined(PLATFORM_WINDOWS)
+    // Windows 默认安装路径
+    const char* default_path = ".\\install";
+#else
+    // Unix 系统默认安装路径（包含 macOS 和 Linux）
+    const char* default_path = getenv("HOME");
+    char home_path[MAX_PATH_LEN] = {0};
+    if (default_path) {
+        snprintf(home_path, MAX_PATH_LEN, "%s/.local", default_path);
+        default_path = home_path;
+    } else {
+        default_path = "/usr/local"; // 后备默认值
+    }
+#endif
+
+    // 处理用户输入的安装路径
+    if (argc > 2) {
+        strncpy(install_path, argv[2], MAX_PATH_LEN - 1);
+        install_path[MAX_PATH_LEN - 1] = '\0'; // 确保终止符
+    } else {
+        strncpy(install_path, default_path, MAX_PATH_LEN - 1);
+        install_path[MAX_PATH_LEN - 1] = '\0';
+    }
+
+    // 尝试进入 build 目录
+    if (CHDIR("build") != 0) {
+        perror("无法进入build目录");
+        return EXIT_FAILURE;
+    }
+
+    // 构建安装命令
+    char command[MAX_PATH_LEN];
+    snprintf(command, MAX_PATH_LEN, "cmake --install . --prefix \"%s\"", install_path);
+    
+    return execute_command(command);
+}
+
+
+
+// 包管理器类型检测
+int detect_package_manager(char* manager, size_t size) {
+    *manager = '\0';
+    
+#if defined(PLATFORM_WINDOWS)
+    // 检测 WinGet
+    if (system("where winget >nul 2>nul") == 0) {
+        snprintf(manager, size, "winget");
+        return 0;
+    }
+    // 检测 Chocolatey
+    if (system("where choco >nul 2>nul") == 0) {
+        snprintf(manager, size, "choco");
+        return 0;
+    }
+    return -1;  // 未找到包管理器
+
+#elif defined(PLATFORM_MACOS)
+    // 检测 Homebrew
+    if (system("command -v brew >/dev/null 2>&1") == 0) {
+        snprintf(manager, size, "brew");
+        return 0;
+    }
+    return -1;  // 未找到包管理器
+
+#elif defined(PLATFORM_LINUX)
+    // 检测 APT
+    if (access("/usr/bin/apt", X_OK) == 0) {
+        snprintf(manager, size, "apt");
+        return 0;
+    }
+    // 检测 DNF (Fedora)
+    if (access("/usr/bin/dnf", X_OK) == 0) {
+        snprintf(manager, size, "dnf");
+        return 0;
+    }
+    // 检测 YUM (CentOS/RHEL)
+    if (access("/usr/bin/yum", X_OK) == 0) {
+        snprintf(manager, size, "yum");
+        return 0;
+    }
+    // 检测 Pacman (Arch)
+    if (access("/usr/bin/pacman", X_OK) == 0) {
+        snprintf(manager, size, "pacman");
+        return 0;
+    }
+    return -1;  // 未找到包管理器
+
+#endif
+}
+
+// 主卸载函数
+int uninstall_thirdparty_library(int argc ,char* argv[]) {
+    char lib_name[32];
+    strcpy(lib_name,argv[2]);
+
+    char manager[32] = {0};
+    
+    // 检测包管理器
+    if (detect_package_manager(manager, sizeof(manager)) != 0) {
+        fprintf(stderr, "错误: 未找到支持的包管理器\n");
+        return -1;
+    }
+
+    printf("检测到包管理器: %s\n", manager);
+
+    // 构建卸载命令
+    char command[256] = {0};
+    
+#if defined(PLATFORM_WINDOWS)
+    if (strcmp(manager, "winget") == 0) {
+        snprintf(command, sizeof(command), "winget uninstall %s", lib_name);
+    } else if (strcmp(manager, "choco") == 0) {
+        snprintf(command, sizeof(command), "choco uninstall %s -y", lib_name);
+    }
+
+#elif defined(PLATFORM_MACOS)
+    if (strcmp(manager, "brew") == 0) {
+        snprintf(command, sizeof(command), "brew uninstall %s", lib_name);
+    }
+
+#elif defined(PLATFORM_LINUX)
+    // 基于不同包管理器构建命令
+    if (strcmp(manager, "apt") == 0) {
+        snprintf(command, sizeof(command), "sudo apt remove -y %s", lib_name);
+    } 
+    else if (strcmp(manager, "dnf") == 0 || strcmp(manager, "yum") == 0) {
+        snprintf(command, sizeof(command), "sudo %s remove -y %s", manager, lib_name);
+    } 
+    else if (strcmp(manager, "pacman") == 0) {
+        snprintf(command, sizeof(command), "sudo pacman -R --noconfirm %s", lib_name);
+    }
+#endif
+
+    return execute_command(command);
+}
+
 int main(int argc,char*argv[]){
     
     print_platform_info();
@@ -831,19 +1087,19 @@ int main(int argc,char*argv[]){
     }
     else{
         // 构建项目
-        if(!strcmp("build",argv[1])){
+        if(! strcmp("build",argv[1])){
             printf("开始构建...\n");
             return build_project(argc,argv);
         }
         
         // 根据解析的CMake.toml初始化项目
-        else if(!strcmp("init",argv[1])){
+        else if(! strcmp("init",argv[1])){
             // 解析并且初始化CMake.toml
             return init_project(argc,argv);
         }
 
         // 清除cmake构建
-        else if(!strcmp("clean",argv[1])){
+        else if(! strcmp("clean",argv[1])){
             return clean_project_cache();
         }
 
@@ -852,9 +1108,19 @@ int main(int argc,char*argv[]){
             return create_new_project(argc,argv);
         }
 
+        // 安装项目
+        else if(! strcmp("install",argv[1])){
+            return install_project(argc,argv) == 1 ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+
+        else if(! strcmp("uninstall",argv[1])){
+            return uninstall_thirdparty_library(argc,argv);
+        }
+
         // 输出帮助消息
         else if(! strcmp(argv[1],"-h") || ! strcmp(argv[1],"--help")){
             print_usage(argv[0]);
+            return EXIT_SUCCESS;
         }
 
         else{
