@@ -61,6 +61,8 @@ void print_usage(const char* program_name) {
     printf("    -D, --dep <依赖> 添加项目依赖\n");
     printf("    -h, --help       显示此帮助信息\n\n");
     printf("  build              构建项目\n");
+    printf("    -d, --debug      使用Debug模式构建\n");
+    printf("    -r, --release    使用Release模式构建\n");
     printf("  init               根据CMake.toml创建新项目\n");
     printf("示例:\n");
     printf("  %s new myapp -e -D fmt -D sdl2\n", program_name);
@@ -359,7 +361,7 @@ int create_library_files(const char* project_name) {
     
     fprintf(src_file, "#include \"%s.h\"\n\n", project_name);
     fprintf(src_file, "int %s_function() {\n", project_name);
-    fprintf(src_file, "    return 42;\n");
+    fprintf(src_file, "    return 0;\n");
     fprintf(src_file, "}\n");
     fclose(src_file);
     
@@ -689,7 +691,42 @@ uint8_t build_project(int argc,char*argv[]){
     // 检查build目录是否存在
     struct stat st;
     memset(&st, 0, sizeof(st)); // 修复初始化方式
-    
+    char cmake_build_type[10] = "Debug";
+#if defined(_WIN)
+    ;
+#else
+    char make_install_prefix[MAX_PATH_LEN] = "/usr/local/";
+#endif
+
+    if(argc>2){
+        for(size_t i = 2; i < argc; i++){
+            if(argv[i][0]!='-'){
+                printf("未知参数\n");
+            }
+            else if(!strcmp(argv[i],"-d") || !strcmp(argv[i],"--debug")){
+                strcpy(cmake_build_type,"Debug");
+            }
+            else if(!strcmp(argv[i],"-r") || !strcmp(argv[i],"--release")){
+                strcpy(cmake_build_type,"Release");
+            }
+#if defined(_WIN)
+            ;
+#else
+            else if(!strcmp(argv[i],"-p") || !strcmp(argv[i],"--prefix")){
+                if(i+1 >= argc){
+                    printf("未识别到安装目录\n");
+                }
+                else{
+                    strcpy(cmake_build_type,argv[i+1]);
+                    i++;
+                }
+            }
+#endif
+        }
+    }
+
+    printf("构建模式为 : %s\n",cmake_build_type);
+
     if (stat("build", &st) == -1) {
         // 如果build目录不存在，创建它
         if (!create_directory("build")) {
@@ -706,10 +743,20 @@ uint8_t build_project(int argc,char*argv[]){
     // 检测CMake缓存
     char cmake_command[MAX_PATH_LEN];
     if (stat("CMakeCache.txt", &st) == 0) {
-        printf("检测到CMake缓存，跳过配置阶段\n");
+        printf("检测到CMake缓存,跳过配置阶段\n");
+#if defined(_WIN)
         strcpy(cmake_command, "cmake --build .");
-    } else {
-        strcpy(cmake_command, "cmake .. && cmake --build .");
+#else
+        strcpy(cmake_command, "make -j$(nproc)");
+#endif
+    } 
+
+    else {
+#if defined(_WIN)
+        snprintf(cmake_command,MAX_PATH_LEN,"cmake .. -DCMAKE_BUILD_TYPE=%s && cmake --build .",cmake_build_type);
+#else
+        snprintf(cmake_command,MAX_PATH_LEN,"cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=%s && make -j$(nproc)",cmake_build_type ,make_install_prefix);
+#endif
     }
     
     // 执行构建命令
@@ -722,6 +769,54 @@ uint8_t build_project(int argc,char*argv[]){
     CHDIR("..");
     
     printf("\n构建成功!\n");
+    return EXIT_SUCCESS;
+}
+
+uint8_t clean_project_cache() {
+    char original_dir[4096];
+    
+    // 保存当前目录
+    if (!getcwd(original_dir, sizeof(original_dir))) {
+        perror("无法获取当前工作目录");
+        return EXIT_FAILURE;
+    }
+
+    // 进入 build 目录
+    if (CHDIR("build") != 0) {
+        // 特殊处理：build目录不存在时视为已清理
+        if (errno == ENOENT) {
+            printf("build目录不存在,无需清理\n");
+            create_directory("build");
+            return EXIT_SUCCESS;
+        }
+        perror("无法进入build目录");
+        return EXIT_FAILURE;
+    }
+
+    // 清理操作
+#if defined(_WIN32)
+    // Windows: 返回上级目录后删除整个build
+    CHDIR("..");
+    if (!execute_command("rmdir /S /Q build 2>NUL")) {
+        printf("清理缓存失败\n");
+        CHDIR(original_dir);  // 失败时恢复原始目录
+        return EXIT_FAILURE;
+    }
+#else
+    // POSIX: 使用更可靠的递归删除命令
+    if (!execute_command("find . -delete 2>/dev/null || { rm -rf ./* && rm -rf .[!.]*; }")) {
+        printf("清理缓存失败\n");
+        CHDIR(original_dir);  // 失败时恢复原始目录
+        return EXIT_FAILURE;
+    }
+    // 返回原始目录
+    if (CHDIR(original_dir) != 0) {
+        perror("无法返回工作目录");
+        return EXIT_FAILURE;
+    }
+#endif
+
+    printf("CMake缓存清理成功\n");
     return EXIT_SUCCESS;
 }
 
@@ -747,13 +842,21 @@ int main(int argc,char*argv[]){
             return init_project(argc,argv);
         }
 
+        // 清除cmake构建
+        else if(!strcmp("clean",argv[1])){
+            return clean_project_cache();
+        }
+
         // 创建新的项目
         else if(! strcmp(argv[1],"new")){
             return create_new_project(argc,argv);
         }
+
+        // 输出帮助消息
         else if(! strcmp(argv[1],"-h") || ! strcmp(argv[1],"--help")){
             print_usage(argv[0]);
         }
+
         else{
             printf("无效参数: %s\n", argv[1]);
             print_usage(argv[0]);
@@ -762,4 +865,4 @@ int main(int argc,char*argv[]){
     }
     
     return EXIT_SUCCESS;
-}
+}     
