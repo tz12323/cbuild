@@ -61,7 +61,7 @@ void print_usage(const char* program_name) {
     print_platform_info();
     printf("\n用法: %s [选项] <项目名>\n\n", program_name);
     printf("选项:\n");
-    printf("  new <项目名>                创建新项目\n");
+    printf("  new <项目名>               创建新项目\n");
     printf("    -e, --executable         创建可执行项目（默认）\n");
     printf("    -s, --static             创建静态库项目\n");
     printf("    -d, --shared             创建动态库项目\n");
