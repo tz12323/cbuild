@@ -66,7 +66,8 @@ void print_usage(const char* program_name) {
     printf("    -s, --static             创建静态库项目\n");
     printf("    -d, --shared             创建动态库项目\n");
     printf("    -D, --dep <依赖>         添加项目依赖\n");
-    printf("    -h, --help               显示此帮助信息\n\n");
+    printf("    -h, --help               显示此帮助信息\n");
+    printf("    -p, --precompile-headers 创建预编译头文件\n");
     printf("  build                      构建项目\n");
     printf("    -d, --debug              使用Debug模式构建\n");
     printf("    -r, --release            使用Release模式构建\n");
@@ -74,6 +75,8 @@ void print_usage(const char* program_name) {
     printf("    -c, --configure-only     选择是否构建\n");
     printf("    -b, --build-dir          设置构建目录\n");
     printf("  init                       根据CMake.toml创建新项目\n");
+    printf("  install <path>             安装生成的文件,如果不设置path则选择默认路径\n");
+    printf("  uninstall <project>        卸载安装的第三方库\n");
     printf("示例:\n");
     printf("  %s new myapp -e -D fmt -D sdl2\n", program_name);
     printf("  %s new mylib -s -D boost\n", program_name);
@@ -90,7 +93,53 @@ void print_usage(const char* program_name) {
 #endif
 }
 
-int create_cmake_toml(const char* project_name, const char* project_type, char deps[][MAX_PATH_LEN], int num_deps) {
+#include <stdbool.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+bool create_precompile_headers(bool add_precompile_headers) {
+    if (!add_precompile_headers) {
+        return true;
+    }
+    
+    // 保存当前工作目录
+    char cwd[1024];
+    if (getcwd(cwd, sizeof(cwd)) == NULL) {
+        perror("打开当前文件失败");
+        return false;
+    }
+
+    FILE* PCH_H = fopen("include/pch.h","w");
+    if(!PCH_H){
+        perror("打开pch.h失败");
+    }
+    else{
+        printf("创建预编译头文件pch.h\n");
+        fprintf(PCH_H,"#ifndef PCH_H\n");
+        fprintf(PCH_H,"#define PCH_H\n\n");
+        fprintf(PCH_H,"#include <string>\n");
+        fprintf(PCH_H,"#include <iostream>\n");
+        fprintf(PCH_H,"#include <vector>\n");
+        fprintf(PCH_H,"#include <map>\n");
+        fprintf(PCH_H,"#include <array>\n");
+        fprintf(PCH_H,"#include <algorithm>\n");
+        fprintf(PCH_H,"#include <functional>\n");
+        fprintf(PCH_H,"#include <future>\n");
+        fprintf(PCH_H,"#include <mutex>\n");
+        fprintf(PCH_H,"#include <thread>\n\n");
+        fprintf(PCH_H,"#endif\n");
+    }
+    // 切换回原目录
+    if (chdir(cwd) != 0) {
+        perror("返回原目录失败");
+        // 即使目录恢复失败，仍返回先前操作的结果
+    }
+    
+    return true;
+}
+
+int create_cmake_toml(const char* project_name, const char* project_type, char deps[][MAX_PATH_LEN], int num_deps, bool add_precompile_headers) {
     FILE* toml_file = fopen("CMake.toml", "w");
     if (!toml_file) {
         perror("创建CMake.toml失败");
@@ -101,6 +150,9 @@ int create_cmake_toml(const char* project_name, const char* project_type, char d
     fprintf(toml_file, "[project]\n");
     fprintf(toml_file, "name = \"%s\"\n", project_name);
     fprintf(toml_file, "type = \"%s\"\n", project_type);
+    if(add_precompile_headers==true){
+        fprintf(toml_file, "precompile_headers = true\n");
+    }
     fprintf(toml_file, "version = \"1.0.0\"\n\n");
     
     fprintf(toml_file, "# 依赖配置\n");
@@ -143,7 +195,7 @@ void trim_string(char *str) {
 }
 
 // 智能解析CMake.toml文件
-int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PATH_LEN], int* num_deps) {
+int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PATH_LEN], int* num_deps, bool* add_precompile_headers) {
     FILE* toml_file = fopen("CMake.toml", "r");
     if (!toml_file) return 0;
     
@@ -201,8 +253,17 @@ int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PAT
             
             if (strstr(key, "name")) {
                 strncpy(project_name, v, MAX_PATH_LEN);
-            } else if (strstr(key, "type")) {
+            } 
+            else if (strstr(key, "type")) {
                 strncpy(project_type, v, 15);
+            }
+            else if (strstr(key,"precompile_headers")){
+                if(!strcmp("true",v)){
+                    add_precompile_headers = true;
+                }
+                else if(!strcmp("false",v)){
+                    add_precompile_headers = false;
+                }
             }
         }
         
@@ -254,14 +315,14 @@ int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PAT
 }
 
 // 创建CMakeLists.txt文件（带依赖项处理）
-int create_cmakelists(const char* project_name, const char* project_type, char deps[][MAX_PATH_LEN], int num_deps) {
+int create_cmakelists(const char* project_name, const char* project_type, char deps[][MAX_PATH_LEN], int num_deps, bool add_precompile_headers) {
     FILE* cmake_file = fopen("CMakeLists.txt", "w");
     if (!cmake_file) {
         perror("创建CMakeLists.txt失败");
         return 0;
     }
     
-    fprintf(cmake_file, "cmake_minimum_required(VERSION 3.10)\n");
+    fprintf(cmake_file, "cmake_minimum_required(VERSION 3.16)\n");
     fprintf(cmake_file, "project(%s LANGUAGES CXX)\n\n", project_name);
     fprintf(cmake_file, "set(CMAKE_CXX_STANDARD 11)\n");
     fprintf(cmake_file, "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n");
@@ -329,7 +390,34 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
         fprintf(cmake_file, ")\n");
         fprintf(cmake_file, "install(FILES include/%s.h DESTINATION include)\n", project_name);
     }
-    
+    if(add_precompile_headers){
+        fprintf(cmake_file, "set(PRECOMPILED_HEADER ${CMAKE_SOURCE_DIR}/include/pch.h)\n");
+        fprintf(cmake_file, "if(MSVC)\n");
+        fprintf(cmake_file, "\tset_target_properties(%s PROPERTIES\n",project_name);
+        fprintf(cmake_file, "\t\tCOMPILE_FLAGS \"/Yu\"${PRECOMPILED_HEADER}\"\"\n");
+        fprintf(cmake_file, "\t)\n");
+        fprintf(cmake_file, "\tset_source_files_properties(${PRECOMPILED_HEADER} PROPERTIES\n");
+        fprintf(cmake_file, "\t\tCOMPILE_FLAGS \"/Yc\"${PRECOMPILED_HEADER}\"\"\n");
+        fprintf(cmake_file, "\t)\n");
+        fprintf(cmake_file, "elseif(CMAKE_CXX_COMPILER_ID MATCHES \"GNU|Clang\")\n");
+        fprintf(cmake_file, "\tset(PCH_OUTPUT \"${CMAKE_BINARY_DIR}/pch.h.gch\")\n");
+        fprintf(cmake_file, "\tadd_custom_command(\n");
+        fprintf(cmake_file, "\t\tOUTPUT ${PCH_OUTPUT}\n");
+        fprintf(cmake_file, "\t\tCOMMAND ${CMAKE_CXX_COMPILER}\n");
+        fprintf(cmake_file, "\t\t\t\t${CMAKE_CXX_FLAGS}\n");
+        fprintf(cmake_file, "\t\t\t\t-x c++-header\n");
+        fprintf(cmake_file, "\t\t\t\t-o ${PCH_OUTPUT}\n");
+        fprintf(cmake_file, "\t\t\t\t-I ${CMAKE_SOURCE_DIR}/include\n");
+        fprintf(cmake_file, "\t\t\t\t${PRECOMPILED_HEADER}\n");
+        fprintf(cmake_file, "\t\tDEPENDS ${PRECOMPILED_HEADER}\n");
+        fprintf(cmake_file, "\t)\n");
+        fprintf(cmake_file, "\tadd_custom_target(pch_target DEPENDS ${PCH_OUTPUT})\n");
+        fprintf(cmake_file, "\tadd_dependencies(%s pch_target)\n",project_name);
+        fprintf(cmake_file, "\ttarget_compile_options(%s PRIVATE\n",project_name);
+        fprintf(cmake_file, "\t\t-include ${PRECOMPILED_HEADER}\n");
+        fprintf(cmake_file, "\t)\n");
+        fprintf(cmake_file, "endif()\n");
+    }
     // 链接依赖库
     if (num_deps > 0) {
         fprintf(cmake_file, "\n# 链接依赖库\n");
@@ -355,13 +443,13 @@ int create_directory(const char* path) {
 }
 
 // 创建初始的main.cpp文件
-int create_main_cpp_file() {
+int create_main_cpp_file(bool add_precompile_headers) {
     FILE* main_file = fopen("src/main.cpp", "w");
     if (!main_file) {
         perror("创建main.cpp失败");
         return 0;
     }
-    
+    if(add_precompile_headers) fprintf(main_file, "#include \"pch.h\"\n");
     fprintf(main_file, "#include <iostream>\n\n");
     fprintf(main_file, "int main() {\n");
     fprintf(main_file, "    std::cout << \"Hello, World!\" << std::endl;\n");
@@ -372,7 +460,7 @@ int create_main_cpp_file() {
 }
 
 // 创建库源文件和头文件
-int create_library_files(const char* project_name) {
+int create_library_files(const char* project_name, bool add_precompile_headers) {
     // 创建源文件
     char src_filename[MAX_PATH_LEN];
     snprintf(src_filename, MAX_PATH_LEN, "src/%s.cpp", project_name);
@@ -382,6 +470,7 @@ int create_library_files(const char* project_name) {
         return 0;
     }
     
+    if(add_precompile_headers) fprintf(src_file, "#include \"pch.h\"\n");
     fprintf(src_file, "#include \"%s.h\"\n\n", project_name);
     fprintf(src_file, "int %s_function() {\n", project_name);
     fprintf(src_file, "    return 0;\n");
@@ -422,6 +511,7 @@ uint8_t create_new_project(int argc,char*argv[]){
     int num_deps_cli = 0;
     uint8_t project_name_set = 0;
     uint8_t create_project = 0;
+    bool add_precompile_headers = false;
 
     if(2==argc){
         create_project++;
@@ -445,6 +535,9 @@ uint8_t create_new_project(int argc,char*argv[]){
         }
         else if(!strcmp(argv[i], "-d") || !strcmp(argv[i], "--shared")) {
             strcpy(project_type, "shared");
+        }
+        else if(!strcmp(argv[i], "-p") || !strcmp(argv[i], "--precompile-headers")) {
+            add_precompile_headers = true;
         }
         else if(!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
             print_usage(argv[0]);
@@ -495,14 +588,14 @@ uint8_t create_new_project(int argc,char*argv[]){
     }
 
     // 创建CMake.toml文件（包含命令行依赖项）
-    if (!create_cmake_toml(project_name, project_type, deps_from_cli, num_deps_cli)) {
+    if (!create_cmake_toml(project_name, project_type, deps_from_cli, num_deps_cli, add_precompile_headers)) {
         return EXIT_FAILURE;
     }
     
     // 解析CMake.toml获取依赖项（包括命令行添加的）
     char deps[MAX_DEPS][MAX_PATH_LEN];
     int num_deps = 0;
-    if (!parse_cmake_toml(project_name, project_type, deps, &num_deps)) {
+    if (!parse_cmake_toml(project_name, project_type, deps, &num_deps, &add_precompile_headers)) {
         printf("警告 : 未能完全解析CMake.toml,使用默认配置\n");
     }
     else if (num_deps > 0) {
@@ -514,21 +607,25 @@ uint8_t create_new_project(int argc,char*argv[]){
     }
 
     // 创建CMakeLists.txt文件（带依赖处理）
-    if(!create_cmakelists(project_name, project_type, deps, num_deps)){
+    if(!create_cmakelists(project_name, project_type, deps, num_deps, add_precompile_headers)){
         return EXIT_FAILURE;
     }
     
     if (strcmp(project_type, "executable") == 0) {
-        if (!create_main_cpp_file()) {
+        if (!create_main_cpp_file(add_precompile_headers)) {
             return EXIT_FAILURE;
         }
     } 
     else {
-        if (!create_library_files(project_name)) {
+        if (!create_library_files(project_name,add_precompile_headers)) {
             return EXIT_FAILURE;
         }
     }
-
+    if(add_precompile_headers){
+        if(!create_precompile_headers(add_precompile_headers)){
+            return EXIT_FAILURE;
+        }
+    }
     // 输出成功信息
     printf("\n项目创建成功! 结构如下:\n");
     printf("%s%c\n", project_name, PATH_SEP);
@@ -590,9 +687,10 @@ uint8_t init_project(int argc,char*argv[]){
     char project_type[15] = "executable";
     char deps[MAX_DEPS][MAX_PATH_LEN];
     int num_deps = 0;
+    bool add_precompile_headers = false;
 
     // 尝试从CMake.toml获取项目名称
-    if (parse_cmake_toml(project_name, project_type, deps, &num_deps)) {
+    if (parse_cmake_toml(project_name, project_type, deps, &num_deps, &add_precompile_headers)) {
         printf("从CMake.toml获取项目名称: %s\n", project_name);
         printf("从CMake.toml获取项目类型: %s\n", project_type);
         if (num_deps > 0) {
@@ -627,32 +725,37 @@ uint8_t init_project(int argc,char*argv[]){
     }
 
     // 创建CMakeLists.txt文件（带依赖处理）
-    if (!create_cmakelists(project_name, project_type, deps, num_deps)) {
+    if (!create_cmakelists(project_name, project_type, deps, num_deps, add_precompile_headers)) {
         return EXIT_FAILURE;
     }
 
     // 创建源文件（如果不存在）
     if (strcmp(project_type, "executable") == 0) {
-        if (stat("src/main.cpp", &st) == -1 && !create_main_cpp_file()) {
+        if (stat("src/main.cpp", &st) == -1 && !create_main_cpp_file(add_precompile_headers)) {
             return EXIT_FAILURE;
         }
     } 
     else {
         char src_file[MAX_PATH_LEN];
         snprintf(src_file, MAX_PATH_LEN, "src/%s.cpp", project_name);
-        if (stat(src_file, &st) == -1 && !create_library_files(project_name)) {
+        if (stat(src_file, &st) == -1 && !create_library_files(project_name,add_precompile_headers)) {
             return EXIT_FAILURE;
         }
     }
-
+    if(add_precompile_headers){
+        if(!create_precompile_headers(add_precompile_headers)){
+            return EXIT_FAILURE;
+        }
+    }
     // 输出成功信息
     printf("\n项目初始化成功!\n");
     printf("已创建/更新以下文件:\n");
     printf("  CMakeLists.txt\n");
     if (stat("CMake.toml", &st) == -1) {
         printf("  CMake.toml (已创建)\n");
-        create_cmake_toml(project_name, project_type, deps, num_deps);
-    } else {
+        create_cmake_toml(project_name, project_type, deps, num_deps, add_precompile_headers);
+    } 
+    else {
         printf("  CMake.toml (已更新)\n");
     }
     
@@ -728,7 +831,8 @@ uint8_t build_project(int argc, char* argv[]) {
     const char* home = getenv("HOME");
     if (home) {
         snprintf(make_install_prefix, MAX_PATH_LEN, "%s/.local", home);
-    } else {
+    } 
+    else {
         strcpy(make_install_prefix, "/usr/local");
     }
 #endif
