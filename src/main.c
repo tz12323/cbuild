@@ -294,6 +294,12 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
         fprintf(cmake_file, "    src/main.cpp\n");
         fprintf(cmake_file, ")\n");
         fprintf(cmake_file, "target_include_directories(%s PRIVATE ${CMAKE_SOURCE_DIR}/include)\n",project_name);
+
+        // 安装规则（跨平台）
+        fprintf(cmake_file, "\n# 安装规则\n");
+        fprintf(cmake_file, "install(TARGETS %s\n", project_name);
+        fprintf(cmake_file, "    RUNTIME DESTINATION bin\n");
+        fprintf(cmake_file, ")\n");
     } 
     else if (strcmp(project_type, "static") == 0) {
         fprintf(cmake_file, "set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/static)\n");
@@ -301,6 +307,13 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
         fprintf(cmake_file, "    src/%s.cpp\n", project_name);
         fprintf(cmake_file, ")\n");
         fprintf(cmake_file, "target_include_directories(%s PRIVATE ${CMAKE_SOURCE_DIR}/include)\n",project_name);
+
+        // 安装规则（跨平台）
+        fprintf(cmake_file, "\n# 安装规则\n");
+        fprintf(cmake_file, "install(TARGETS %s\n", project_name);
+        fprintf(cmake_file, "    ARCHIVE DESTINATION lib\n");
+        fprintf(cmake_file, ")\n");
+        fprintf(cmake_file, "install(FILES include/%s.h DESTINATION include)\n", project_name);
     } 
     else if (strcmp(project_type, "shared") == 0) {
         fprintf(cmake_file, "set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/shared)\n");
@@ -312,9 +325,7 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
         // 安装规则（跨平台）
         fprintf(cmake_file, "\n# 安装规则\n");
         fprintf(cmake_file, "install(TARGETS %s\n", project_name);
-        fprintf(cmake_file, "    RUNTIME DESTINATION bin\n");
         fprintf(cmake_file, "    LIBRARY DESTINATION lib\n");
-        fprintf(cmake_file, "    ARCHIVE DESTINATION lib\n");
         fprintf(cmake_file, ")\n");
         fprintf(cmake_file, "install(FILES include/%s.h DESTINATION include)\n", project_name);
     }
