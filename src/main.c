@@ -46,20 +46,20 @@
 void print_platform_info() {
     printf("运行平台: ");
 #if defined(PLATFORM_WINDOWS)
-    printf("Windows\n");
+    printf("Windows\n\n");
 #elif defined(PLATFORM_MACOS)
-    printf("macOS\n");
+    printf("macOS\n\n");
 #elif defined(PLATFORM_LINUX)
-    printf("Linux\n");
+    printf("Linux\n\n");
 #else
-    printf("未知平台\n");
+    printf("未知平台\n\n");
 #endif
 }
 
 // 输出参数
 void print_usage(const char* program_name) {
     print_platform_info();
-    printf("\n用法: %s [选项] <项目名>\n\n", program_name);
+    printf("用法: %s [选项] <项目名>\n", program_name);
     printf("选项:\n");
     printf("  new <项目名>               创建新项目\n");
     printf("    -e, --executable         创建可执行项目（默认）\n");
@@ -76,8 +76,30 @@ void print_usage(const char* program_name) {
     printf("    -b, --build-dir          设置构建目录\n");
     printf("  init                       根据CMake.toml创建新项目\n");
     printf("  install <path>             安装生成的文件,如果不设置path则选择默认路径\n");
-    printf("  uninstall <project>        卸载安装的第三方库\n");
+    printf("  uninstall                  卸载安装的库\n");
     printf("示例:\n");
+    printf("  %s new myapp -e -D fmt -D sdl2\n", program_name);
+    printf("  %s new mylib -s -D boost\n\n\n", program_name);
+
+    printf("Usage: %s [options] <project-name>\n", program_name);
+    printf("Options:\n");
+    printf("  new <project-name>             Create new project\n");
+    printf("    -e, --executable             Create executable project (default)\n");
+    printf("    -s, --static                 Create static library project\n");
+    printf("    -d, --shared                 Create shared library project\n");
+    printf("    -D, --dep <dependency>       Add project dependency\n");
+    printf("    -h, --help                   Display this help message\n");
+    printf("    -p, --precompile-headers     Create precompiled headers\n");
+    printf("  build                          Build project\n");
+    printf("    -d, --debug                  Build using Debug mode\n");
+    printf("    -r, --release                Build using Release mode\n");
+    printf("    -p, --prefix                 Specify installation directory\n");
+    printf("    -c, --configure-only         Configure without building\n");
+    printf("    -b, --build-dir              Set build directory\n");
+    printf("  init                           Create new project based on CMake.toml\n");
+    printf("  install <path>                 Install built files (uses default path if omitted)\n");
+    printf("  uninstall                      Uninstall installed library\n");
+    printf("Examples:\n");
     printf("  %s new myapp -e -D fmt -D sdl2\n", program_name);
     printf("  %s new mylib -s -D boost\n", program_name);
     
@@ -827,14 +849,7 @@ uint8_t build_project(int argc, char* argv[]) {
 #if PLATFORM_WINDOWS
     strcpy(make_install_prefix, ".\\install"); // Windows默认安装路径
 #else
-    // Unix默认安装路径
-    const char* home = getenv("HOME");
-    if (home) {
-        snprintf(make_install_prefix, MAX_PATH_LEN, "%s/.local", home);
-    } 
-    else {
-        strcpy(make_install_prefix, "/usr/local");
-    }
+    strcpy(make_install_prefix, "/usr/local");
 #endif
 
     // 增强的参数解析
@@ -846,15 +861,30 @@ uint8_t build_project(int argc, char* argv[]) {
             strcpy(cmake_build_type, "Release");
         } 
         else if (!strcmp(argv[i], "-p") || !strcmp(argv[i], "--prefix")) {
+#if PLATFORM_WINDOWS
             if (i + 1 >= argc) {
-                fprintf(stderr, "错误：未指定安装目录\n");
-                return EXIT_FAILURE;
+                fprintf(stderr, "错误：未指定安装目录,使用默认安装目录\n");
+                strcpy(make_install_prefix,".\\install");
+                continue;
             }
             if(argv[i+1][0]=='-'){
                 fprintf(stderr, "错误：未指定安装目录,使用默认安装目录\n");
+                strcpy(make_install_prefix,".\\install");
                 continue;
             }
-            strncpy(make_install_prefix, argv[++i], MAX_PATH_LEN - 1);
+#else
+            if (i + 1 >= argc) {
+                fprintf(stderr, "错误：未指定安装目录,使用默认安装目录\n");
+                strcpy(make_install_prefix,"/usr/local");
+                continue;
+            }
+            if(argv[i+1][0]=='-'){
+                fprintf(stderr, "错误：未指定安装目录,使用默认安装目录\n");
+                strcpy(make_install_prefix,"/usr/local");
+                continue;
+            }
+#endif
+            strcpy(make_install_prefix, argv[++i]);
             make_install_prefix[MAX_PATH_LEN - 1] = '\0';
         } 
         else if (!strcmp(argv[i], "--configure-only") || !strcmp(argv[i], "-c")) {
@@ -1056,29 +1086,13 @@ uint8_t clean_project_cache() {
 
 uint8_t install_project(int argc, char* argv[]) {
     char install_path[MAX_PATH_LEN] = {0}; // 初始化路径缓冲区
-
-#if defined(PLATFORM_WINDOWS)
-    // Windows 默认安装路径
-    const char* default_path = ".\\install";
-#else
-    // Unix 系统默认安装路径（包含 macOS 和 Linux）
-    const char* default_path = getenv("HOME");
-    char home_path[MAX_PATH_LEN] = {0};
-    if (default_path) {
-        snprintf(home_path, MAX_PATH_LEN, "%s/.local", default_path);
-        default_path = home_path;
-    } else {
-        default_path = "/usr/local"; // 后备默认值
-    }
-#endif
+    bool set_path = false;
 
     // 处理用户输入的安装路径
     if (argc > 2) {
-        strncpy(install_path, argv[2], MAX_PATH_LEN - 1);
+        set_path = true;
+        strcpy(install_path, argv[2]);
         install_path[MAX_PATH_LEN - 1] = '\0'; // 确保终止符
-    } else {
-        strncpy(install_path, default_path, MAX_PATH_LEN - 1);
-        install_path[MAX_PATH_LEN - 1] = '\0';
     }
 
     // 尝试进入 build 目录
@@ -1089,108 +1103,58 @@ uint8_t install_project(int argc, char* argv[]) {
 
     // 构建安装命令
     char command[MAX_PATH_LEN];
-    snprintf(command, MAX_PATH_LEN, "cmake --install . --prefix \"%s\"", install_path);
-    
+    if(set_path == true) snprintf(command, MAX_PATH_LEN, "sudo cmake --install . --prefix \"%s\"", install_path);
+    else snprintf(command, MAX_PATH_LEN, "sudo cmake --install .");
     return execute_command(command);
-}
-
-
-
-// 包管理器类型检测
-int detect_package_manager(char* manager, size_t size) {
-    *manager = '\0';
-    
-#if defined(PLATFORM_WINDOWS)
-    // 检测 WinGet
-    if (system("where winget >nul 2>nul") == 0) {
-        snprintf(manager, size, "winget");
-        return 0;
-    }
-    // 检测 Chocolatey
-    if (system("where choco >nul 2>nul") == 0) {
-        snprintf(manager, size, "choco");
-        return 0;
-    }
-    return -1;  // 未找到包管理器
-
-#elif defined(PLATFORM_MACOS)
-    // 检测 Homebrew
-    if (system("command -v brew >/dev/null 2>&1") == 0) {
-        snprintf(manager, size, "brew");
-        return 0;
-    }
-    return -1;  // 未找到包管理器
-
-#elif defined(PLATFORM_LINUX)
-    // 检测 APT
-    if (access("/usr/bin/apt", X_OK) == 0) {
-        snprintf(manager, size, "apt");
-        return 0;
-    }
-    // 检测 DNF (Fedora)
-    if (access("/usr/bin/dnf", X_OK) == 0) {
-        snprintf(manager, size, "dnf");
-        return 0;
-    }
-    // 检测 YUM (CentOS/RHEL)
-    if (access("/usr/bin/yum", X_OK) == 0) {
-        snprintf(manager, size, "yum");
-        return 0;
-    }
-    // 检测 Pacman (Arch)
-    if (access("/usr/bin/pacman", X_OK) == 0) {
-        snprintf(manager, size, "pacman");
-        return 0;
-    }
-    return -1;  // 未找到包管理器
-
-#endif
 }
 
 // 主卸载函数
-int uninstall_thirdparty_library(int argc ,char* argv[]) {
-    char lib_name[32];
-    strcpy(lib_name,argv[2]);
-
-    char manager[32] = {0};
-    
-    // 检测包管理器
-    if (detect_package_manager(manager, sizeof(manager)) != 0) {
-        fprintf(stderr, "错误: 未找到支持的包管理器\n");
-        return -1;
+bool uninstall() {
+    FILE* install_manifest = fopen("build/install_manifest.txt", "r");
+    if (!install_manifest) {
+        perror("Failed to open install manifest");
+        return 1;
     }
 
-    printf("检测到包管理器: %s\n", manager);
+    char file_path[1024];
+    int success_count = 0;
+    int fail_count = 0;
 
-    // 构建卸载命令
-    char command[256] = {0};
-    
+    while (fgets(file_path, sizeof(file_path), install_manifest)) {
+        size_t len = strlen(file_path);
+        if (len > 0 && file_path[len - 1] == '\n') {
+            file_path[len - 1] = '\0';
+        }
+
+        int result;
 #if defined(PLATFORM_WINDOWS)
-    if (strcmp(manager, "winget") == 0) {
-        snprintf(command, sizeof(command), "winget uninstall %s", lib_name);
-    } else if (strcmp(manager, "choco") == 0) {
-        snprintf(command, sizeof(command), "choco uninstall %s -y", lib_name);
-    }
-
-#elif defined(PLATFORM_MACOS)
-    if (strcmp(manager, "brew") == 0) {
-        snprintf(command, sizeof(command), "brew uninstall %s", lib_name);
-    }
-
-#elif defined(PLATFORM_LINUX)
-    // 基于不同包管理器构建命令
-    if (strcmp(manager, "apt") == 0) {
-        snprintf(command, sizeof(command), "sudo apt remove -y %s", lib_name);
-    } 
-    else if (strcmp(manager, "dnf") == 0 || strcmp(manager, "yum") == 0) {
-        snprintf(command, sizeof(command), "sudo %s remove -y %s", manager, lib_name);
-    } 
-    else if (strcmp(manager, "pacman") == 0) {
-        snprintf(command, sizeof(command), "sudo pacman -R --noconfirm %s", lib_name);
-    }
+        for (char* p = file_path; *p; ++p) {
+            if (*p == '/') *p = '\\';
+        }
+        
+        SetFileAttributes(file_path, FILE_ATTRIBUTE_NORMAL);
+        result = remove(file_path);
+#else
+        char command[MAX_PATH_LEN];
+        snprintf(command,MAX_PATH_LEN,"sudo rm %s",file_path);
+        printf("romve %s\n",file_path);
+        result = system(command);
 #endif
 
-    return execute_command(command);
+        if (result == 0) {
+            success_count++;
+        } 
+        else {
+            perror(file_path);
+            fail_count++;
+        }
+    }
+
+    fclose(install_manifest);
+
+    printf("卸载完成：已删除 %d 个文件, %d 个文件失败\n", success_count, fail_count);
+    
+    return fail_count ? false : true;
 }
 
 int main(int argc,char*argv[]){
@@ -1235,8 +1199,9 @@ int main(int argc,char*argv[]){
             return install_project(argc,argv) == 1 ? EXIT_SUCCESS : EXIT_FAILURE;
         }
 
+        // 卸载安装的项目
         else if(! strcmp("uninstall",argv[1])){
-            return uninstall_thirdparty_library(argc,argv);
+            return uninstall() ? EXIT_SUCCESS : EXIT_FAILURE;
         }
 
         // 输出帮助消息
