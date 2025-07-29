@@ -105,7 +105,7 @@ void print_usage(const char* program_name) {
     
 #if defined(PLATFORM_WINDOWS)
     printf("\n注意: Windows平台需要预先安装CMake和编译器\n");
-    printf("      推荐使用MSVC或MinGW\n");
+    printf("      推荐使用MinGW\n");
 #elif defined(PLATFORM_MACOS)
     printf("\n注意: macOS平台需要安装Xcode命令行工具:\n");
     printf("      xcode-select --install\n");
@@ -114,11 +114,6 @@ void print_usage(const char* program_name) {
     printf("      sudo apt-get install build-essential cmake\n");
 #endif
 }
-
-#include <stdbool.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
 
 bool create_precompile_headers(bool add_precompile_headers) {
     if (!add_precompile_headers) {
@@ -987,11 +982,11 @@ uint8_t build_project(int argc, char* argv[]) {
             *dest = '\0';
             
             snprintf(cmake_command, sizeof(cmake_command), 
-                "cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" %s",
+                "cmake .. -G \"MinGW Makefiles\" -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ %s",
                 cmake_build_type, escaped_prefix, additional_flags);
         #else
             snprintf(cmake_command, sizeof(cmake_command), 
-                "cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" %s",
+                "cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ %s",
                 cmake_build_type, make_install_prefix, additional_flags);
         #endif
         
