@@ -1098,8 +1098,13 @@ uint8_t install_project(int argc, char* argv[]) {
 
     // 构建安装命令
     char command[MAX_PATH_LEN];
+#if defined(PLATFORM_WINDOWS)
+    if(set_path == true) snprintf(command, MAX_PATH_LEN, "cmake --install . --prefix \"%s\"", install_path);
+    else snprintf(command, MAX_PATH_LEN, "cmake --install .");
+#else
     if(set_path == true) snprintf(command, MAX_PATH_LEN, "sudo cmake --install . --prefix \"%s\"", install_path);
     else snprintf(command, MAX_PATH_LEN, "sudo cmake --install .");
+#endif
     return execute_command(command);
 }
 
