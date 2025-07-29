@@ -344,7 +344,15 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
     fprintf(cmake_file, "set(CMAKE_CXX_STANDARD 11)\n");
     fprintf(cmake_file, "set(CMAKE_CXX_STANDARD_REQUIRED ON)\n");
     fprintf(cmake_file, "set(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n\n");
-    
+#ifdef PLATFORM_WINDOWS
+    if (num_deps > 0) {
+        fprintf(cmake_file, "# Windows平台依赖设置\n");
+        for (int i = 0; i < num_deps; i++) {
+            fprintf(cmake_file, "find_package(%s REQUIRED)\n", deps[i]);
+        }
+        fprintf(cmake_file, "\n");
+    }
+#else
     // 添加PkgConfig支持
     if (num_deps > 0) {
         fprintf(cmake_file, "# 启用pkg-config\n");
@@ -365,6 +373,7 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
     else if (strcmp(project_type, "library") != 0) {
         fprintf(cmake_file, "include_directories(include)\n\n");
     }
+#endif
     
     if (strcmp(project_type, "executable") == 0) {
         fprintf(cmake_file, "set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)\n");
@@ -435,6 +444,22 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
         fprintf(cmake_file, "\t)\n");
         fprintf(cmake_file, "endif()\n");
     }
+#ifdef PLATFOROM_WINDOWS
+    if(num_deps > 0){
+        fprintf(cmake_file, "\n# Windows平台链接依赖库\n");
+        fprintf(cmake_file, "target_include_directories(%s PRIVATE\n", project_name);
+        for (int i = 0; i < num_deps; i++) {
+            fprintf(cmake_file, "    ${%s_INCLUDE_DIRS}\n", deps[i]);
+        }
+        fprintf(cmake_file, ")\n");
+        
+        fprintf(cmake_file, "target_link_libraries(%s PRIVATE\n", project_name);
+        for (int i = 0; i < num_deps; i++) {
+            fprintf(cmake_file, "    ${%s_LIBRARIES}\n", deps[i]);
+        }
+        fprintf(cmake_file, ")\n");
+    }
+#else
     // 链接依赖库
     if (num_deps > 0) {
         fprintf(cmake_file, "\n# 链接依赖库\n");
@@ -444,7 +469,7 @@ int create_cmakelists(const char* project_name, const char* project_type, char d
         }
         fprintf(cmake_file, ")\n");
     }
-    
+#endif
     fclose(cmake_file);
     return 1;
 }
