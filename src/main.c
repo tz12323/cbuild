@@ -74,6 +74,7 @@ void print_usage(const char* program_name) {
     printf("    -p, --prefix             指定安装目录\n");
     printf("    -c, --configure-only     选择是否构建\n");
     printf("    -b, --build-dir          设置构建目录\n");
+    printf("    -C, --clean-cache        构建前清理cmake缓存\n");
     printf("  init                       根据CMake.toml创建新项目\n");
     printf("  install <path>             安装生成的文件,如果不设置path则选择默认路径\n");
     printf("  uninstall                  卸载安装的库\n");
@@ -96,6 +97,7 @@ void print_usage(const char* program_name) {
     printf("    -p, --prefix                 Specify installation directory\n");
     printf("    -c, --configure-only         Configure without building\n");
     printf("    -b, --build-dir              Set build directory\n");
+    printf("    -C, --clean-cache            Clean cmake cache before building\n");
     printf("  init                           Create new project based on CMake.toml\n");
     printf("  install <path>                 Install built files (uses default path if omitted)\n");
     printf("  uninstall                      Uninstall installed library\n");
@@ -858,12 +860,65 @@ int execute_command(const char* command) {
     return 1;
 }
 
+uint8_t clean_project_cache() {
+    char original_dir[4096];
+    
+    // 保存当前目录
+    if (!getcwd(original_dir, sizeof(original_dir))) {
+        perror("无法获取当前工作目录");
+        return EXIT_FAILURE;
+    }
+
+    // 进入 build 目录
+    if (CHDIR("build") != 0) {
+        // 特殊处理：build目录不存在时视为已清理
+        if (errno == ENOENT) {
+            printf("build目录不存在,无需清理\n");
+            create_directory("build");
+            return EXIT_SUCCESS;
+        }
+        perror("无法进入build目录");
+        return EXIT_FAILURE;
+    }
+
+    // 清理操作
+#if defined(PLATFORM_WINDOWS)
+    // Windows: 返回上级目录后删除整个build
+    CHDIR("..");
+    if (!execute_command("rmdir /S /Q build 2>NUL")) {
+        printf("清理缓存失败\n");
+        CHDIR(original_dir);  // 失败时恢复原始目录
+        return EXIT_FAILURE;
+    }
+    if(!create_directory("build")){
+        printf("创建build目录失败\n");
+        return EXIT_FAILURE;
+    }
+#else
+    // POSIX: 使用更可靠的递归删除命令
+    if (!execute_command("find . -delete 2>/dev/null || { rm -rf ./* && rm -rf .[!.]*; }")) {
+        printf("清理缓存失败\n");
+        CHDIR(original_dir);  // 失败时恢复原始目录
+        return EXIT_FAILURE;
+    }
+    // 返回原始目录
+    if (CHDIR(original_dir) != 0) {
+        perror("无法返回工作目录");
+        return EXIT_FAILURE;
+    }
+#endif
+
+    printf("CMake缓存清理成功\n");
+    return EXIT_SUCCESS;
+}
+
 uint8_t build_project(int argc, char* argv[]) {
     char cmake_build_type[16] = "Debug"; // 使用更安全的长度
     char make_install_prefix[MAX_PATH_LEN] = ""; // 跨平台前缀初始化
     char build_dir[MAX_PATH_LEN] = "build";
     char additional_flags[1024] = "";
     bool configure_only = false;
+    bool clean_cache = false;
 
     // 设置默认安装路径
 #if PLATFORM_WINDOWS
@@ -918,6 +973,9 @@ uint8_t build_project(int argc, char* argv[]) {
             strncpy(build_dir, argv[++i], MAX_PATH_LEN - 1);
             build_dir[MAX_PATH_LEN - 1] = '\0';
         }
+        else if(!strcmp(argv[i],"-C") || !strcmp(argv[i],"--clean-cache")){
+            clean_cache = true;
+        }
         else {
             // 收集额外的CMake参数
             if (additional_flags[0] != '\0') strcat(additional_flags, " ");
@@ -927,6 +985,13 @@ uint8_t build_project(int argc, char* argv[]) {
 
     printf("构建模式: %s | 安装路径: %s\n", cmake_build_type, make_install_prefix);
 
+    if(clean_cache){
+        printf("清理缓存\n");
+        if(clean_project_cache()!=EXIT_SUCCESS){
+            fprintf(stderr, "清理缓存失败\n");
+            return EXIT_FAILURE;
+        }
+    }
     // 处理构建目录
     struct stat st;
     memset(&st, 0, sizeof(st));
@@ -936,7 +1001,6 @@ uint8_t build_project(int argc, char* argv[]) {
             return EXIT_FAILURE;
         }
     }
-
     // 保存当前目录
     char cwd[MAX_PATH_LEN];
     if (!getcwd(cwd, sizeof(cwd))) {
@@ -977,7 +1041,6 @@ uint8_t build_project(int argc, char* argv[]) {
                 }
             }
             fclose(cache_file);
-            
             if (strcmp(existing_type, cmake_build_type) == 0) {
                 need_configure = false;
                 printf("检测到现有的CMake缓存(构建类型相同),跳过配置阶段\n");
@@ -995,7 +1058,7 @@ uint8_t build_project(int argc, char* argv[]) {
     // 配置阶段
     if (need_configure) {
         // 构建配置命令
-        #if PLATFORM_WINDOWS
+#if PLATFORM_WINDOWS
             // Windows路径需要特殊处理反斜杠
             char escaped_prefix[MAX_PATH_LEN * 2] = {0};
             char* pos = make_install_prefix;
@@ -1009,11 +1072,11 @@ uint8_t build_project(int argc, char* argv[]) {
             snprintf(cmake_command, sizeof(cmake_command), 
                 "cmake .. -G \"MinGW Makefiles\" -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ %s",
                 cmake_build_type, escaped_prefix, additional_flags);
-        #else
+#else
             snprintf(cmake_command, sizeof(cmake_command), 
                 "cmake .. -DCMAKE_BUILD_TYPE=%s -DCMAKE_INSTALL_PREFIX=\"%s\" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ %s",
                 cmake_build_type, make_install_prefix, additional_flags);
-        #endif
+#endif
         
         printf("配置CMake: %s\n", cmake_command);
         if (!execute_command(cmake_command)) {
@@ -1053,54 +1116,6 @@ uint8_t build_project(int argc, char* argv[]) {
     }
 
     printf("\n构建%s成功!\n", configure_only ? "配置" : "");
-    return EXIT_SUCCESS;
-}
-
-uint8_t clean_project_cache() {
-    char original_dir[4096];
-    
-    // 保存当前目录
-    if (!getcwd(original_dir, sizeof(original_dir))) {
-        perror("无法获取当前工作目录");
-        return EXIT_FAILURE;
-    }
-
-    // 进入 build 目录
-    if (CHDIR("build") != 0) {
-        // 特殊处理：build目录不存在时视为已清理
-        if (errno == ENOENT) {
-            printf("build目录不存在,无需清理\n");
-            create_directory("build");
-            return EXIT_SUCCESS;
-        }
-        perror("无法进入build目录");
-        return EXIT_FAILURE;
-    }
-
-    // 清理操作
-#if defined(PLATFORM_WINDOWS)
-    // Windows: 返回上级目录后删除整个build
-    CHDIR("..");
-    if (!execute_command("rmdir /S /Q build 2>NUL")) {
-        printf("清理缓存失败\n");
-        CHDIR(original_dir);  // 失败时恢复原始目录
-        return EXIT_FAILURE;
-    }
-#else
-    // POSIX: 使用更可靠的递归删除命令
-    if (!execute_command("find . -delete 2>/dev/null || { rm -rf ./* && rm -rf .[!.]*; }")) {
-        printf("清理缓存失败\n");
-        CHDIR(original_dir);  // 失败时恢复原始目录
-        return EXIT_FAILURE;
-    }
-    // 返回原始目录
-    if (CHDIR(original_dir) != 0) {
-        perror("无法返回工作目录");
-        return EXIT_FAILURE;
-    }
-#endif
-
-    printf("CMake缓存清理成功\n");
     return EXIT_SUCCESS;
 }
 

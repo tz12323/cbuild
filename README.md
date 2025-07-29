@@ -23,6 +23,7 @@ Build the project
 - `-p, --prefix`: Specify installation directory
 - `-c, --configure-only`: Configure without building
 - `-b, --build-dir`: Set build directory
+- `-C, --clean-cache`: Clean cmake cache before building         
 
 ### `init`
 Create new project based on `CMake.toml`
@@ -61,6 +62,7 @@ cbuild [选项] <项目名>
 - `-p, --prefix`：指定安装目录
 - `-c, --configure-only`：选择是否构建
 - `-b, --build-dir`：设置构建目录
+- `-C, --clean-cache`：构建前清理cmake缓存
 
 
 ### `init`
