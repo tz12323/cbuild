@@ -281,10 +281,10 @@ int parse_cmake_toml(char* project_name, char* project_type, char deps[][MAX_PAT
             }
             else if (strstr(key,"precompile_headers")){
                 if(!strcmp("true",v)){
-                    add_precompile_headers = true;
+                    *add_precompile_headers = true;
                 }
                 else if(!strcmp("false",v)){
-                    add_precompile_headers = false;
+                    *add_precompile_headers = false;
                 }
             }
         }
